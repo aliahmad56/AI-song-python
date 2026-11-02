@@ -1,0 +1,12 @@
+fastapi
+dotenv
+uvicorn
+requests
+boto3
+s3fs
+openai==0.28
+music21
+basic-pitch
+colorama
+python-multipart
+pydub

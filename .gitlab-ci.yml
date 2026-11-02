@@ -1,0 +1,57 @@
+stages:          # List of stages for jobs, and their order of execution
+  - build
+  - deploy
+variables:
+  DOCKER_IMAGE_PREFIX: "aisong-python-api-"
+  DOCKER_IMAGE_TAG: "$DOCKER_IMAGE_PREFIX$CI_COMMIT_REF_NAME"
+  DOCKER_TLS_CERTDIR: "/certs"
+  CONTAINER_NAME: "aisong-${CI_COMMIT_REF_NAME}-python-api-container"
+
+build-job:       # This job runs in the build stage, which runs first.
+  image: docker:20.10.16
+  stage: build
+  environment: $CI_COMMIT_REF_NAME
+  only:
+    - staging
+    #- test
+  services: 
+    - docker:20.10.16-dind
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login --username "$CI_REGISTRY_USER" --password-stdin
+     
+  script:
+    - echo "$Env_variable" >> .env
+    - cat .env
+    - docker build -t $DOCKER_IMAGE_TAG .
+    - docker tag $DOCKER_IMAGE_TAG codistan/aisong:$DOCKER_IMAGE_TAG
+    - docker push codistan/aisong:$DOCKER_IMAGE_TAG
+    
+  
+    
+
+deploy-job:      # This job runs in the deploy stage.
+  stage: deploy  # It only runs when *both* jobs in the test stage complete successfully.
+  environment: $CI_COMMIT_REF_NAME
+     
+  only:
+    - staging
+    #- test
+  before_script:
+    - apt update
+    - mkdir ~/.ssh
+    - eval $(ssh-agent -s)
+    - echo "$PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - chmod 700 /root/.ssh
+    - ssh-keyscan -H "$PUBLIC_KEY" >> ~/.ssh/known_hosts
+  script:
+    - ssh -o StrictHostKeyChecking=no ubuntu@$PUBLIC_KEY
+    - ssh -o StrictHostKeyChecking=no ubuntu@$PUBLIC_KEY sudo docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+    - ssh -o StrictHostKeyChecking=no ubuntu@$PUBLIC_KEY sudo docker rm -f $CONTAINER_NAME || true
+    - ssh -o StrictHostKeyChecking=no ubuntu@$PUBLIC_KEY sudo docker image rm -f codistan/aisong:$DOCKER_IMAGE_TAG || true
+    - ssh -o StrictHostKeyChecking=no ubuntu@$PUBLIC_KEY sudo docker pull codistan/aisong:$DOCKER_IMAGE_TAG
+    - ssh -o StrictHostKeyChecking=no ubuntu@$PUBLIC_KEY sudo docker run -d --name $CONTAINER_NAME -p 8000:8000 codistan/aisong:$DOCKER_IMAGE_TAG
+    - ssh -o StrictHostKeyChecking=no ubuntu@$PUBLIC_KEY sudo docker image prune -f
+
+
+    ###########
+

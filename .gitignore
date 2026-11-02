@@ -1,0 +1,8 @@
+.env
+__pycache__
+song_generation.log
+test.py
+backup.py
+main_1.py
+*.json
+ai-song
